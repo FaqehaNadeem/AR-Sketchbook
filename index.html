@@ -1,9 +1,10 @@
 
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
+  <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+
   <title>AR Sketchbook</title>
 
   <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
@@ -15,78 +16,36 @@
       width: 100%;
       height: 100%;
       overflow: hidden;
-      font-family: sans-serif;
-      background: #111;
     }
 
-    #start-screen {
+    #sound-button {
       position: fixed;
-      inset: 0;
-      z-index: 1000;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      gap: 16px;
-      padding: 24px;
+      z-index: 9999;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 12px 18px;
+      border: none;
+      border-radius: 24px;
+      background: rgba(0, 0, 0, 0.75);
       color: white;
-      background: #111;
-      text-align: center;
-    }
-
-    #start-button {
-      padding: 14px 24px;
-      border: 0;
-      border-radius: 30px;
-      font-size: 16px;
-    }
-
-    #hint {
-      position: fixed;
-      z-index: 1001;
-      bottom: 20px;
-      left: 0;
-      right: 0;
-      color: white;
-      text-align: center;
-      text-shadow: 0 1px 4px black;
-      pointer-events: none;
-    }
-
-    .a-enter-vr, .a-enter-ar {
-      display: none !important;
+      font-size: 15px;
     }
   </style>
 </head>
 
 <body>
-  <div id="start-screen">
-    <h1>AR Sketchbook</h1>
-    <p>Allow camera access, then point your phone at the sketchbook page.</p>
-    <button id="start-button">Start AR</button>
-    <p id="status">Ready</p>
-  </div>
-
-  <div id="hint">Point your camera at the page</div>
+  <button id="sound-button">Enable sound</button>
 
   <a-scene
-    id="ar-scene"
-    mindar-image="imageTargetSrc: ./targets.mind; autoStart: false; uiScanning: true; maxTrack: 1"
+    mindar-image="imageTargetSrc: ./targets.mind; maxTrack: 1;"
     color-space="sRGB"
-    renderer="alpha: true, colorManagement: true, physicallyCorrectLights: true"
+    renderer="colorManagement: true, physicallyCorrectLights"
     vr-mode-ui="enabled: false"
     device-orientation-permission-ui="enabled: false">
 
     <a-assets>
-      <video
-        id="video1"
-        src="./assets/animation-video-1.mp4"
-        preload="auto"
-        loop
-        playsinline
-        webkit-playsinline
-        muted>
-      </video>
+      <img id="animation" src="./assets/animation.gif">
     </a-assets>
 
     <a-camera
@@ -94,59 +53,79 @@
       look-controls="enabled: false">
     </a-camera>
 
-    <a-entity id="target1" mindar-image-target="targetIndex: 0">
-      <a-video
-        id="plane1"
-        src="#video1"
+    <a-entity
+      id="target"
+      mindar-image-target="targetIndex: 0">
+
+      <a-plane
+        id="gif-plane"
+        src="#animation"
         width="1"
         height="0.66"
-        position="0 0 0.02">
-      </a-video>
+        position="0 0 0.02"
+        material="shader: flat; transparent: true; side: double"
+        gif-refresh>
+      </a-plane>
+
     </a-entity>
   </a-scene>
 
+  <audio
+    id="track"
+    src="./assets/track.mp3"
+    preload="auto"
+    loop>
+  </audio>
+
   <script>
-    const scene = document.querySelector("#ar-scene");
-    const startScreen = document.querySelector("#start-screen");
-    const startButton = document.querySelector("#start-button");
-    const status = document.querySelector("#status");
-    const video = document.querySelector("#video1");
-    const target = document.querySelector("#target1");
-
-    startButton.addEventListener("click", async () => {
-      startButton.disabled = true;
-      status.textContent = "Starting camera...";
-
-      try {
-        await scene.systems["mindar-image-system"].start();
-        startScreen.style.display = "none";
-      } catch (error) {
-        console.error(error);
-        status.textContent =
-          "Camera failed. Check camera permission and reload.";
-        startButton.disabled = false;
+    // Keep animated GIF frames updating as a WebGL texture.
+    AFRAME.registerComponent("gif-refresh", {
+      tick: function () {
+        const mesh = this.el.getObject3D("mesh");
+        if (mesh && mesh.material && mesh.material.map) {
+          mesh.material.map.needsUpdate = true;
+        }
       }
     });
 
-    target.addEventListener("targetFound", async () => {
+    const target = document.querySelector("#target");
+    const audio = document.querySelector("#track");
+    const button = document.querySelector("#sound-button");
+
+    let soundEnabled = false;
+    let targetVisible = false;
+
+    button.addEventListener("click", async () => {
       try {
-        await video.play();
+        // Unlock audio playback following a user gesture.
+        await audio.play();
+        audio.pause();
+        audio.currentTime = 0;
+
+        soundEnabled = true;
+        button.textContent = "Sound enabled";
+
+        if (targetVisible) {
+          await audio.play();
+        }
       } catch (error) {
-        status.textContent = "Tap the screen to start video.";
+        button.textContent = "Tap to enable sound again";
+      }
+    });
+
+    target.addEventListener("targetFound", () => {
+      targetVisible = true;
+
+      if (soundEnabled) {
+        audio.currentTime = 0;
+        audio.play().catch(console.error);
       }
     });
 
     target.addEventListener("targetLost", () => {
-      video.pause();
-    });
-
-    document.body.addEventListener("click", async () => {
-      if (!video.paused) return;
-      try {
-        await video.play();
-      } catch (error) {
-        console.log("Video playback needs another tap.");
-      }
+      targetVisible = false;
+      audio.pause();
+      audio.currentTime = 0;
     });
   </script>
 </body>
